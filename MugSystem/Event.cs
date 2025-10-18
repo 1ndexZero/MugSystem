@@ -12,26 +12,38 @@
         }
     }
 
-    public class EasingEvent : PointEvent<double>
+    public abstract class CurveEvent<T> : PointEvent<T>
     {
         public BeatTime TimeLength { get; set; }
-        public double ValueChanged { get; set; }
+        public T ValueChanged { get; set; }
+
+        public CurveEvent(BeatTime time, BeatTime timeLength, T value, T valueChanged)
+            : base(time, value)
+        {
+            TimeLength = timeLength;
+            ValueChanged = valueChanged;
+        }
+
+        public virtual T GetValue(BeatTime time, BpmEventList bpmList)
+        {
+            return Value;
+        }
+    }
+
+    public class EasingEvent : CurveEvent<double>
+    {
         public TransformType TransformType { get; set; }
         public EasingType EasingType { get; set; }
 
         public EasingEvent(BeatTime time, BeatTime timeLength, double value, double valueChanged,
             TransformType transformType, EasingType easingType)
-            : base(time, value)
+            : base(time, timeLength, value, valueChanged)
         {
-            Time = time;
-            TimeLength = timeLength;
-            Value = value;
-            ValueChanged = valueChanged;
             TransformType = transformType;
             EasingType = easingType;
         }
 
-        public double GetValue(BeatTime time, BpmEventList bpmList)
+        public override double GetValue(BeatTime time, BpmEventList bpmList)
         {
             double ts = bpmList.ConvertToMs(Time);
             double te = bpmList.ConvertToMs(Time + TimeLength);
