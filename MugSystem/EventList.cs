@@ -212,7 +212,7 @@ namespace MugSystem
         private List<double> _timeCaches;
 
         public BpmEventList(double initValue, bool timeCacheAutoUpdate = true, int linearSearchThreshold = 16)
-        : base(initValue, linearSearchThreshold)
+            : base(initValue, linearSearchThreshold)
         {
             if (initValue <= 0)
                 throw new ArgumentException("BPM cannot be 0 or a negative number", "initValue");

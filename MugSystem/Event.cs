@@ -1,15 +1,5 @@
 ﻿namespace MugSystem
 {
-    public interface IIntervalEvent<T>
-    {
-        BeatTime TimeStart { get; set; }
-        BeatTime TimeEnd { get; set; }
-        T ValueStart { get; set; }
-        T ValueEnd { get; set; }
-
-        T GetValue(BeatTime time, BpmEventList bpmList);
-    }
-
     public class PointEvent<T>
     {
         public BeatTime Time { get; set; }
@@ -22,36 +12,34 @@
         }
     }
 
-    public class EasingEvent : IIntervalEvent<double>
+    public class EasingEvent : PointEvent<double>
     {
-        public BeatTime TimeStart { get; set; }
-        public BeatTime TimeEnd { get; set; }
-        public double ValueStart { get; set; }
-        public double ValueEnd { get; set; }
+        public BeatTime TimeLength { get; set; }
+        public double ValueChanged { get; set; }
         public TransformType TransformType { get; set; }
         public EasingType EasingType { get; set; }
 
-        public EasingEvent(BeatTime timeStart, BeatTime timeEnd,
-            double valueStart, double valueEnd,
+        public EasingEvent(BeatTime time, BeatTime timeLength, double value, double valueChanged,
             TransformType transformType, EasingType easingType)
+            : base(time, value)
         {
-            TimeStart = timeStart;
-            TimeEnd = timeEnd;
-            ValueStart = valueStart;
-            ValueEnd = valueEnd;
+            Time = time;
+            TimeLength = timeLength;
+            Value = value;
+            ValueChanged = valueChanged;
             TransformType = transformType;
             EasingType = easingType;
         }
 
         public double GetValue(BeatTime time, BpmEventList bpmList)
         {
-            double ts = bpmList.ConvertToMs(TimeStart);
-            double te = bpmList.ConvertToMs(TimeEnd);
+            double ts = bpmList.ConvertToMs(Time);
+            double te = bpmList.ConvertToMs(Time + TimeLength);
             double t = bpmList.ConvertToMs(time);
 
-            return ValueStart
+            return Value
                 + Easing.GetValue(TransformType, EasingType, (t - ts) / (te - ts))
-                * (ValueEnd - ValueStart);
+                * (ValueChanged - Value);
         }
     }
 }
