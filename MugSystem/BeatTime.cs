@@ -26,7 +26,7 @@ namespace MugSystem
             D = d;
         }
 
-        public BeatTime(float t, int d)
+        public BeatTime(double t, int d)
         {
             if (d == 0)
                 throw new ArgumentException("分母不能为 0");

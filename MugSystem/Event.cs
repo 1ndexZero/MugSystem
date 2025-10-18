@@ -1,4 +1,6 @@
-﻿namespace MugSystem
+﻿using System;
+
+namespace MugSystem
 {
     public class PointEvent<T>
     {
@@ -24,10 +26,13 @@
             ValueChanged = valueChanged;
         }
 
-        public virtual T GetValue(BeatTime time, BpmEventList bpmList)
-        {
-            return Value;
-        }
+        public abstract T GetValueByMs(double time, BpmEventList bpmEventList);
+
+        public T GetValueByBeatTime(BeatTime time, BpmEventList bpmEventList) =>
+            GetValueByMs(bpmEventList.ConvertToMs(time), bpmEventList);
+
+        public T GetValueByBeatTime(double time, BpmEventList bpmEventList) =>
+            GetValueByMs(bpmEventList.ConvertToMs(time), bpmEventList);
     }
 
     public class EasingEvent : CurveEvent<double>
@@ -43,15 +48,54 @@
             EasingType = easingType;
         }
 
-        public override double GetValue(BeatTime time, BpmEventList bpmList)
+        public override double GetValueByMs(double time, BpmEventList bpmEventList)
         {
-            double ts = bpmList.ConvertToMs(Time);
-            double te = bpmList.ConvertToMs(Time + TimeLength);
-            double t = bpmList.ConvertToMs(time);
+            double ts = bpmEventList.ConvertToMs(Time);
+            double te = bpmEventList.ConvertToMs(Time + TimeLength);
 
             return Value
-                + Easing.GetValue(TransformType, EasingType, (t - ts) / (te - ts))
+                + Easing.GetValue(TransformType, EasingType, (time - ts) / (te - ts))
                 * (ValueChanged - Value);
         }
+    }
+
+    public class SpeedEvent : CurveEvent<double>
+    {
+        public SpeedEvent(BeatTime time, BeatTime timeLength, double value, double valueChanged)
+            : base(time, timeLength, value, valueChanged) { }
+
+        public override double GetValueByMs(double time, BpmEventList bpmEventList)
+        {
+            double ts = bpmEventList.ConvertToMs(Time);
+            double te = bpmEventList.ConvertToMs(Time + TimeLength);
+
+            return Value + (ValueChanged - Value) * (time - ts) / (te - ts);
+        }
+
+        public double GetDisplacementByBeatTime(BeatTime time, BpmEventList bpmEventList) =>
+            GetDisplacementByMs(bpmEventList.ConvertToMs(time), bpmEventList);
+
+        public double GetDisplacementByBeatTime(double time, BpmEventList bpmEventList) =>
+            GetDisplacementByMs(bpmEventList.ConvertToMs(time), bpmEventList);
+
+        public double GetDisplacementByMs(double time, BpmEventList bpmEventList)
+        {
+            double ts = bpmEventList.ConvertToMs(Time);
+            double te = bpmEventList.ConvertToMs(Time + TimeLength);
+
+            return (Value +
+                (Value + (ValueChanged - Value) * (time - ts) / (te - ts))
+                ) * (time - ts) / 2;
+        }
+
+        public double GetDisplacementAll(BpmEventList bpmEventList)
+        {
+
+            double ts = bpmEventList.ConvertToMs(Time);
+            double te = bpmEventList.ConvertToMs(Time + TimeLength);
+
+            return (Value + ValueChanged) * (te - ts) / 2;
+        }
+
     }
 }

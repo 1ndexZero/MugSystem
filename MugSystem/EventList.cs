@@ -88,6 +88,22 @@ namespace MugSystem
             _points.Clear();
         }
 
+        public virtual T GetValueByBeatTime(BeatTime time)
+        {
+            if ((double)time < 0)
+                throw new ArgumentException("time cannot be negative", "time");
+
+            return _points[FindIndexByBeatTime(time)].Value;
+        }
+
+        public virtual T GetValueByBeatTime(double time)
+        {
+            if ((double)time < 0)
+                throw new ArgumentException("time cannot be negative", "time");
+
+            return _points[FindIndexByBeatTime(time)].Value;
+        }
+
         public bool Remove(PointEvent<T> item)
         {
             int? index = _points.FindIndex((i) => i == item);
@@ -195,14 +211,6 @@ namespace MugSystem
 
             throw new Exception("Unreachable code reached in FindIndexByBeatTime");
         }
-
-        public T GetValue(BeatTime time)
-        {
-            if ((double)time < 0)
-                throw new ArgumentException("time cannot be negative", "time");
-
-            return _points[FindIndexByBeatTime(time)].Value;
-        }
     }
 
     public class BpmEventList : PointEventList<double>
@@ -246,7 +254,7 @@ namespace MugSystem
                     {
                         _points.Insert(i, item);
                         _timeCaches.Add(0);
-                        UpdateTimeCaches(i);
+                        UpdateTimeCachesAuto(i);
                         return;
                     }
                 }
@@ -395,6 +403,160 @@ namespace MugSystem
             }
 
             throw new Exception("Unreachable code reached in TimeCachesFindIndex");
+        }
+    }
+
+    public class PointEventListWithBpm<T> : PointEventList<T>
+    {
+        public BpmEventList BpmEventList { get; set; }
+
+        public PointEventListWithBpm(T initValue, BpmEventList bpmEventList, int linearSearchThreshold = 16)
+            : base(initValue, linearSearchThreshold)
+        {
+            BpmEventList = bpmEventList;
+        }
+
+        public virtual T GetValueByMs(double time)
+        {
+            if (time < 0)
+                throw new ArgumentException("time cannot be negative", "time");
+
+            double beatTime = BpmEventList.ConvertToBeatTime(time);
+            return GetValueByBeatTime(beatTime);
+        }
+
+        public int FindIndexByMs(double time) =>
+            FindIndexByBeatTime(BpmEventList.ConvertToBeatTime(time));
+    }
+
+    public class CurveEventList<T> : PointEventListWithBpm<T>
+    {
+        public CurveEventList(T initValue, BpmEventList bpmEventList, int linearSearchThreshold = 16)
+            : base(initValue, bpmEventList, linearSearchThreshold) { }
+
+        public override T GetValueByMs(double time)
+        {
+            if (time < 0)
+                throw new ArgumentException("time cannot be negative", "time");
+
+            int index = FindIndexByMs(time);
+
+            if (index == -1) return InitValue;
+
+            PointEvent<T> pointEvent = _points[index];
+
+            if (pointEvent is CurveEvent<T> curveEvent)
+            {
+                if (time >= BpmEventList.ConvertToMs(curveEvent.Time + curveEvent.TimeLength))
+                    return curveEvent.ValueChanged;
+                return curveEvent.GetValueByMs(time, BpmEventList);
+            }
+
+            return pointEvent.Value;
+        }
+    }
+
+    public class DisplacementEventList : CurveEventList<double>
+    {
+        public bool DisplacementCacheAutoUpdate { get; set; }
+
+        private List<double> _displacementCache;
+
+        public DisplacementEventList(double initValue, BpmEventList bpmEventList, bool displacementCacheAutoUpdate = true, int linearSearchThreshold = 16)
+            : base(initValue, bpmEventList, linearSearchThreshold)
+        {
+            _displacementCache = new List<double>();
+            DisplacementCacheAutoUpdate = displacementCacheAutoUpdate;
+        }
+
+        public override void Add(PointEvent<double> item)
+        {
+            if ((double)item.Time < 0)
+                throw new ArgumentException("time cannot be negative", "item");
+
+            if (item.Value <= 0)
+                throw new ArgumentException("BPM cannot be 0 or a negative number", "item");
+
+            if (_points.Count == 0)
+            {
+                _points.Add(item);
+
+                if (DisplacementCacheAutoUpdate)
+                    _displacementCache.Add(InitValue * BpmEventList.ConvertToMs(_points[0].Time));
+            }
+
+            if (_points.Count <= LinearSearchThreshold)
+            {
+                for (int i = 0; i < _points.Count; i++)
+                {
+                    if (_points[i].Time >= item.Time)
+                    {
+                        _points.Insert(i, item);
+                        _displacementCache.Add(0);
+                        UpdateDisplacementCachesAuto(i);
+                        return;
+                    }
+                }
+                _points.Add(item);
+                _displacementCache.Add(0);
+                UpdateDisplacementCachesAuto(_points.Count - 1);
+            }
+
+            else
+            {
+                int i = 0;
+                int j = _points.Count - 1;
+
+                while (i <= j)
+                {
+                    int m = i + (j - i) / 2;
+
+                    if (_points[m].Time < item.Time)
+                        i = m + 1;
+                    else
+                        j = m - 1;
+                }
+
+                _points.Insert(i, item);
+                _displacementCache.Add(0);
+                UpdateDisplacementCachesAuto(i);
+            }
+        }
+
+        public override void RemoveAt(int index)
+        {
+            base.RemoveAt(index);
+
+            _displacementCache.RemoveAt(_points.Count - 1);
+            UpdateDisplacementCachesAuto(index);
+        }
+
+        public override void Clear()
+        {
+            base.Clear();
+            _displacementCache.Clear();
+        }
+
+        private void UpdateDisplacementCaches(int startIndex)
+        {
+            if (startIndex < 0 || startIndex >= _points.Count) return;
+
+            if (startIndex == 0)
+            {
+                _displacementCache[0] = InitValue * BpmEventList.ConvertToMs(_points[0].Time);
+                startIndex++;
+            }
+
+            for (int i = startIndex; i < _points.Count; i++)
+                if (_points[i - 1] is SpeedEvent curveEvent)
+                    _displacementCache[i] = _displacementCache[i - 1] + curveEvent.GetDisplacementAll(BpmEventList);
+                else
+                    _displacementCache[i] = _displacementCache[i - 1] + _points[i - 1].Value;
+        }
+
+        private void UpdateDisplacementCachesAuto(int startIndex)
+        {
+            if (DisplacementCacheAutoUpdate) UpdateDisplacementCaches(startIndex);
         }
     }
 }
