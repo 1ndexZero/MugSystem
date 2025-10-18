@@ -1,1 +1,1 @@
-# MugSystem
+# MUG System
